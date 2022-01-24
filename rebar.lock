@@ -1,0 +1,4 @@
+[{<<"numerl">>,
+  {git,"https://github.com/tanguyl/numerl.git",
+       {ref,"4b1f7b2c4ef1049cd61a46742e50f0823c606ee9"}},
+  0}].
