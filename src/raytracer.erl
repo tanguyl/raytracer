@@ -3,6 +3,15 @@
 -export([p3/0]).
 
 
+%Ray-related functions.
+-record(ray, {orig, dest}).
+
+ray_at(#ray{orig=O, dest=D}, t) ->
+    numerl:plus(O, numerl:mult(D,t)).
+
+
+%Render-related functions.
+
 write_color(S, Vector)->
     io:format(S, "~B ~B ~B~n", numerl:mtfli(Vector)).
 
