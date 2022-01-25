@@ -1,7 +1,7 @@
 Raytracer
 =====
 
-This project is a benchmark of the numerl library https://github.com/tanguyl/numerl, consisting in the raytracer described at https://raytracing.github.io/books/RayTracingInOneWeekend.html.
+This project is a benchmark of the numerl library https://github.com/tanguyl/numerl, consisting in the implementation of a raytracer described at https://raytracing.github.io/books/RayTracingInOneWeekend.html.
 
 # Implemented
 Create a simple ppm picture.
