@@ -2,13 +2,15 @@
 
 -export([render/0]).
 -import(math, [sqrt/1]).
+-import(rand, [uniform/0]).
 
 
 -record(sphere,{center,radius,color}).
 -record(ray, {origin, direction}).
 -record(hit, {p, normal, t, front_face}).
+-record(camera, { origin, horizontal, vertical, lower_left_corner}).
 
-%Vector/color related function.
+%Vector/color/basic math related function.
 %----------------------------------------------------
 
 color(M)->
@@ -24,6 +26,19 @@ squared_length(V)->
 
 unit_vector(V)->
     numerl:divide(V, numerl:nrm2(V)).
+
+random_double()->
+    1.0-rand:uniform().
+random_double(Min, Max)->
+    Min + (Max-Min)*random_double().
+
+clamp(Val, Min, Max)->
+    if Val < Min -> Min;
+    true ->
+        if Val > Max -> Max;
+        true -> Val
+        end
+    end.
 
 %Hit related functions.
 %--------------------------------------------------
@@ -95,16 +110,9 @@ ray_color(Ray=#ray{}, HittableList)->
     end.
 
 
-%Render-related functions.
-%----------------------------------------------------
-render()->
-    %Screen.
-    Aspect_ratio = 16/9,
-    Image_width = 600,
-    Image_height = round(Image_width / Aspect_ratio),
-
-
-    %Camera.
+%Camera related functions.
+%---------------------------------------------------
+camera(Aspect_ratio)->
     Viewport_height = 2.0,
     Viewport_width = Aspect_ratio * Viewport_height,
     Focal_length = 1.0,
@@ -114,29 +122,58 @@ render()->
     Vertical = vec3(0, Viewport_height, 0),
     Lower_left_corner = numerl:eval([Origin, sub, numerl:divide(Horizontal,2), sub, numerl:divide(Vertical,2), sub, vec3(0,0, Focal_length)]),
 
+    #camera{origin=Origin, horizontal=Horizontal, vertical=Vertical, lower_left_corner=Lower_left_corner}.
+
+    
+
+camera_get_ray(Camera=#camera{}, U, V)->
+   #ray{origin=Camera#camera.origin, direction=numerl:eval([Camera#camera.lower_left_corner,
+                                                            add,numerl:mult(Camera#camera.horizontal, U),
+                                                            add,numerl:mult(Camera#camera.vertical, V),
+                                                            sub, Camera#camera.origin])}.
+
+%IO related functions.
+%---------------------------------------------------
+avg_color(Color, Samples_per_pixel)->
+    numerl:divide(Color, Samples_per_pixel).
+
+
+%Render-related functions.
+%----------------------------------------------------
+render()->
+    %Screen.
+    Aspect_ratio = 16/9,
+    Image_width = 500,
+    Image_height = round(Image_width / Aspect_ratio),
+    Samples_per_pixel = 10,
+
     %Scene.
-    World = [#sphere{center=vec3(0,0,-1),radius = 0.5},
-            #sphere{center=vec3(0,-100.5,-1),radius=100}],
+    World = [
+                #sphere{center=vec3(0,0,-1),radius = 0.5},
+                #sphere{center=vec3(0,-100.5,-1),radius=100}        
+            ],
 
-    GenPixel = fun(I,J)->
-                    U = I/(Image_width-1),
-                    V = J/(Image_height-1),
-                    R = ray(Origin, numerl:eval([Lower_left_corner, add, numerl:mult(Horizontal,U), add, numerl:mult(Vertical,V), sub, Origin])),
-                    %io:format("~B ~B ~f~n", [I, J, sqrd_len(R#ray.direction)]),
-                    Color = ray_color(R, World),
-                    if I == 0   -> 
-                        io:format("\r~B remaining.", [J]),
-                        Color;
-                    true        -> Color end
-                end,
+    Camera = camera(Aspect_ratio),
 
-    Picture = [[ GenPixel(I,J) || I <- lists:seq(1,Image_width-1)] || J <- lists:seq(Image_height-1,1, -1)],
+    GenPixel = 
+        fun F(_,_, 0, Color)->
+            Color;
+        F(I,J, Sample, Color)->
+            U = (I + random_double())/(Image_width-1),
+            V = (J + random_double())/(Image_height-1),
+            Ray = camera_get_ray(Camera, U, V),
+            C = ray_color(Ray, World),
+            %io:format("~f ~f ~f ~n", numerl:mtfl(C)),
+            F(I, J, Sample-1, numerl:add(Color, C))
+        end,
+
+    Picture = [[ GenPixel(I,J, Samples_per_pixel, numerl:matrix([[0,0,0]])) || I <- lists:seq(1,Image_width-1)] || J <- lists:seq(Image_height-1,1, -1)],
     
     {ok, S} = file:open("image.ppm", [write, {delayed_write, 70000000, 100}]),
     WriteLines = 
         fun F([])->ok;
          F([Colors|T])->
-            io:format(S, "~B ~B ~B~n", numerl:mtfli(Colors)),
+            io:format(S, "~B ~B ~B~n", numerl:mtfli(avg_color(Colors, Samples_per_pixel))),
              F(T)
         end,
 
