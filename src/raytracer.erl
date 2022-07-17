@@ -8,7 +8,7 @@
 -record(sphere,{center, radius, material}).
 -record(ray, {origin, direction}).
 -record(hit, {p, normal, t, front_face, material}).
--record(material, {name, aldebo}).
+-record(material, {name, aldebo, fuzz}).
 -record(camera, { origin, horizontal, vertical, lower_left_corner}).
 
 %Vector/color/basic math related function.
@@ -70,6 +70,13 @@ is_face_normal(R=#ray{}, Outward_normal)->
 
 %Material related functions.
 %---------------------------------------------------
+material_lambertian(Aldebo)->
+    #material{name=lambertian, aldebo=Aldebo}.
+
+material_metal(Aldebo, Fuzz)->
+    #material{name=metal, aldebo = Aldebo, fuzz=clamp(Fuzz, 0,1)}.
+material_metal(Aldebo)->
+    material_metal(Aldebo, 0).
 
 %Produce a scattered ray; and indicate how it should be attenuated.
 scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
@@ -88,7 +95,7 @@ scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
     
     metal->
         Reflected = reflect(unit_vector(Ray_in#ray.direction), Hit#hit.normal),
-        Scattered = ray(Hit#hit.p, Reflected),
+        Scattered = ray(Hit#hit.p, numerl:add(Reflected, numerl:mult(random_in_unit_sphere(), Material#material.fuzz))),
         VD = numerl:vec_dot(Scattered#ray.direction, Hit#hit.normal),
         if VD > 0 ->
             {Material#material.aldebo, Scattered};
@@ -149,6 +156,7 @@ hit_in_list(L, Ray, T_min, T_max) ->
 
 %World is a list of hittable object.
 ray_color(_,_,0)->
+    io:format("Max recursion reached.~n"),
     vec3(0,0,0);
 ray_color(Ray=#ray{}, HittableList, Depth)->
     Hit = hit_in_list(HittableList, Ray, 0.001, 10000000),
@@ -204,15 +212,15 @@ render()->
     Aspect_ratio = 16/9,
     Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 500,
-    Max_depth = 40,
+    Samples_per_pixel = 100,
+    Max_depth = 50,
 
     %Scene.
     World = [
-                #sphere{center=vec3(1.1,0,-1),radius = 0.5, material=#material{name=metal, aldebo=vec3(0.8, 0.8, 0.8)}},
-                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=#material{name=metal, aldebo=vec3(0.8, 0.6, 0.2)}},
-                #sphere{center=vec3(0,0,-1),radius = 0.5, material=#material{name=lambertian, aldebo=vec3(0.8, 0.8, 0.0)}},
-                #sphere{center=vec3(0,-100.5,-1),radius=100, material=#material{name=lambertian, aldebo=vec3(0.7, 0.3, 0.3)}}        
+                #sphere{center=vec3(1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.8, 0.8), 0.1)},
+                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 1.0)},
+                #sphere{center=vec3(0,0,-1),radius = 0.5, material=material_lambertian(vec3(0.7, 0.3, 0.3))},
+                #sphere{center=vec3(0,-100.5,-1),radius=100, material=material_lambertian(vec3(0.8, 0.8, 0.0))}        
             ],
 
     Camera = camera(Aspect_ratio),
@@ -225,7 +233,6 @@ render()->
             V = (J + random_double())/(Image_height-1),
             Ray = camera_get_ray(Camera, U, V),
             C = ray_color(Ray, World, Max_depth),
-            %io:format("~f ~f ~f ~n", numerl:mtfl(C)),
             F(I, J, Sample-1, numerl:add(Color, C))
         end,
 
