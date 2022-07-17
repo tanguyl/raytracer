@@ -164,7 +164,7 @@ render()->
     Aspect_ratio = 16/9,
     Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 10,
+    Samples_per_pixel = 100,
     Max_depth = 50,
 
     %Scene.
@@ -189,7 +189,7 @@ render()->
 
     Picture = [[ GenPixel(I,J, Samples_per_pixel, numerl:matrix([[0,0,0]])) || I <- lists:seq(1,Image_width-1)] || J <- lists:seq(Image_height-1,1, -1)],
     
-    {ok, S} = file:open("image.ppm", [write, {delayed_write, 70000000, 100}]),
+    {ok, S} = file:open("renders/image.ppm", [write, {delayed_write, 70000000, 100}]),
     WriteLines = 
         fun F([])->ok;
          F([Colors|T])->
