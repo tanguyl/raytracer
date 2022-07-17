@@ -5,9 +5,10 @@
 -import(rand, [uniform/0]).
 
 
--record(sphere,{center,radius,color}).
+-record(sphere,{center, radius, material}).
 -record(ray, {origin, direction}).
--record(hit, {p, normal, t, front_face}).
+-record(hit, {p, normal, t, front_face, material}).
+-record(material, {name, aldebo}).
 -record(camera, { origin, horizontal, vertical, lower_left_corner}).
 
 %Vector/color/basic math related function.
@@ -26,6 +27,8 @@ squared_length(V)->
 
 unit_vector(V)->
     numerl:divide(V, numerl:nrm2(V)).
+reflect(V, N)->
+    numerl:eval([V, sub, numerl:mult(numerl:mult(N, numerl:vec_dot(V,N)),2)]).
 
 random_double()->
     1.0-rand:uniform().
@@ -46,6 +49,8 @@ random_in_unit_sphere()->
     end.
 random_unit_vector()->
     unit_vector(random_vec(-1,1)).
+near_zero(V)->
+    lists:all(fun(Val)->abs(Val) < 0.00000001 end, numerl:mtfl(V)).
 
 clamp(Val, Min, Max)->
     if Val < Min -> Min;
@@ -62,6 +67,37 @@ clamp(Val, Min, Max)->
 %Create a new record whith the "front_face" variable set.
 is_face_normal(R=#ray{}, Outward_normal)->
     numerl:vec_dot(R#ray.direction, Outward_normal) < 0.
+
+%Material related functions.
+%---------------------------------------------------
+
+%Produce a scattered ray; and indicate how it should be attenuated.
+scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
+    case Material#material.name of 
+    lambertian->
+        Potential_scatter_direction = numerl:add(Hit#hit.normal, random_unit_vector()),
+        Near_zero = near_zero(Potential_scatter_direction),
+        if Near_zero ->
+            %io:format("Near zero."),
+            Scatter_direction = Hit#hit.normal;
+        true ->
+            %io:format("Not near zero."),
+            Scatter_direction = Potential_scatter_direction
+        end,
+        {Material#material.aldebo, ray(Hit#hit.p, Scatter_direction)};
+    
+    metal->
+        Reflected = reflect(unit_vector(Ray_in#ray.direction), Hit#hit.normal),
+        Scattered = ray(Hit#hit.p, Reflected),
+        VD = numerl:vec_dot(Scattered#ray.direction, Hit#hit.normal),
+        if VD > 0 ->
+            {Material#material.aldebo, Scattered};
+        true->
+            false
+        end;
+    _ ->
+        false
+    end.
 
 
 %Ray-related functions.
@@ -92,7 +128,7 @@ hit(Object=#sphere{}, Ray, T_min, T_max)->
                 true ->
                     Pos = ray_at(Ray, Root),
                     Normal = numerl:divide(numerl:sub(Pos, Object#sphere.center), Object#sphere.radius),
-                    #hit{t=Root, p=Pos, normal=Normal, front_face=is_face_normal(Ray, Normal)}
+                    #hit{t=Root, p=Pos, normal=Normal, front_face=is_face_normal(Ray, Normal), material=Object#sphere.material}
             end
     end.
 
@@ -116,17 +152,21 @@ ray_color(_,_,0)->
     vec3(0,0,0);
 ray_color(Ray=#ray{}, HittableList, Depth)->
     Hit = hit_in_list(HittableList, Ray, 0.001, 10000000),
-    if 
+    if
         Hit == false->
             %Background color
             Unit_direction = unit_vector(Ray#ray.direction),
             T = 0.5 * (numerl:at(Unit_direction, 2) + 1),
             numerl:add(numerl:mult(vec3(1.0, 1.0, 1.0), 1 - T), numerl:mult(vec3(0.5, 0.7, 1.0), T));
         true ->
-            Target = numerl:eval([Hit#hit.p, add, Hit#hit.normal, add, random_unit_vector()]),
-            %io:format("~f ~f ~f ~n", [numerl:at(M,1), numerl:at(M,2), numerl:at(M,3)]),
-            numerl:mult(ray_color(#ray{origin=Hit#hit.p, direction=Target}, HittableList, Depth - 1), 0.5)
+            case scatter(Hit#hit.material, Ray, Hit) of
+                {Attenuation, Scattered} ->
+                    numerl:mult(ray_color(Scattered, HittableList, Depth - 1), Attenuation);
+                _ ->
+                    vec3(0,0,0)
+            end
     end.
+    
 
 
 %Camera related functions.
@@ -164,13 +204,15 @@ render()->
     Aspect_ratio = 16/9,
     Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 100,
-    Max_depth = 50,
+    Samples_per_pixel = 500,
+    Max_depth = 40,
 
     %Scene.
     World = [
-                #sphere{center=vec3(0,0,-1),radius = 0.5},
-                #sphere{center=vec3(0,-100.5,-1),radius=100}        
+                #sphere{center=vec3(1.1,0,-1),radius = 0.5, material=#material{name=metal, aldebo=vec3(0.8, 0.8, 0.8)}},
+                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=#material{name=metal, aldebo=vec3(0.8, 0.6, 0.2)}},
+                #sphere{center=vec3(0,0,-1),radius = 0.5, material=#material{name=lambertian, aldebo=vec3(0.8, 0.8, 0.0)}},
+                #sphere{center=vec3(0,-100.5,-1),radius=100, material=#material{name=lambertian, aldebo=vec3(0.7, 0.3, 0.3)}}        
             ],
 
     Camera = camera(Aspect_ratio),
