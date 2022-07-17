@@ -156,7 +156,6 @@ hit_in_list(L, Ray, T_min, T_max) ->
 
 %World is a list of hittable object.
 ray_color(_,_,0)->
-    io:format("Max recursion reached.~n"),
     vec3(0,0,0);
 ray_color(Ray=#ray{}, HittableList, Depth)->
     Hit = hit_in_list(HittableList, Ray, 0.001, 10000000),
@@ -212,13 +211,13 @@ render()->
     Aspect_ratio = 16/9,
     Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 100,
+    Samples_per_pixel = 400,
     Max_depth = 50,
 
     %Scene.
     World = [
                 #sphere{center=vec3(1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.8, 0.8), 0.1)},
-                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 1.0)},
+                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 0.9)},
                 #sphere{center=vec3(0,0,-1),radius = 0.5, material=material_lambertian(vec3(0.7, 0.3, 0.3))},
                 #sphere{center=vec3(0,-100.5,-1),radius=100, material=material_lambertian(vec3(0.8, 0.8, 0.0))}        
             ],
