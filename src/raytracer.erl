@@ -32,6 +32,21 @@ random_double()->
 random_double(Min, Max)->
     Min + (Max-Min)*random_double().
 
+random_vec()->
+    numerl:matrix([[random_double(), random_double(), random_double()]]).
+random_vec(Min, Max)->
+    numerl:matrix([[random_double(Min, Max), random_double(Min, Max), random_double(Min, Max)]]).
+random_in_unit_sphere()->
+    V = random_vec(-1,1),
+    In_sphere = squared_length(V) < 1,
+    if In_sphere ->
+        V;
+    true->
+        random_in_unit_sphere()
+    end.
+random_unit_vector()->
+    unit_vector(random_vec(-1,1)).
+
 clamp(Val, Min, Max)->
     if Val < Min -> Min;
     true ->
@@ -39,6 +54,8 @@ clamp(Val, Min, Max)->
         true -> Val
         end
     end.
+
+
 
 %Hit related functions.
 %--------------------------------------------------
@@ -95,18 +112,20 @@ hit_in_list(L, Ray, T_min, T_max) ->
     hit_recursion(L, Ray, T_min, T_max, false).
 
 %World is a list of hittable object.
-ray_color(Ray=#ray{}, HittableList)->
-    Hit = hit_in_list(HittableList, Ray, 0, 100),
+ray_color(_,_,0)->
+    vec3(0,0,0);
+ray_color(Ray=#ray{}, HittableList, Depth)->
+    Hit = hit_in_list(HittableList, Ray, 0.001, 10000000),
     if 
         Hit == false->
             %Background color
             Unit_direction = unit_vector(Ray#ray.direction),
             T = 0.5 * (numerl:at(Unit_direction, 2) + 1),
-            numerl:add(numerl:mult(color(1.0, 1.0, 1.0), 1 - T), numerl:mult(color(0.5, 0.7, 1.0), T));
+            numerl:add(numerl:mult(vec3(1.0, 1.0, 1.0), 1 - T), numerl:mult(vec3(0.5, 0.7, 1.0), T));
         true ->
-            M = numerl:mult( numerl:add(Hit#hit.normal,1), 0.5),
+            Target = numerl:eval([Hit#hit.p, add, Hit#hit.normal, add, random_unit_vector()]),
             %io:format("~f ~f ~f ~n", [numerl:at(M,1), numerl:at(M,2), numerl:at(M,3)]),
-            color(M)
+            numerl:mult(ray_color(#ray{origin=Hit#hit.p, direction=Target}, HittableList, Depth - 1), 0.5)
     end.
 
 
@@ -135,7 +154,7 @@ camera_get_ray(Camera=#camera{}, U, V)->
 %IO related functions.
 %---------------------------------------------------
 avg_color(Color, Samples_per_pixel)->
-    numerl:divide(Color, Samples_per_pixel).
+    lists:map(fun (V)-> round(math:sqrt(V) * 255) end, numerl:mtfl(numerl:divide(Color, Samples_per_pixel))).
 
 
 %Render-related functions.
@@ -146,6 +165,7 @@ render()->
     Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
     Samples_per_pixel = 10,
+    Max_depth = 50,
 
     %Scene.
     World = [
@@ -162,7 +182,7 @@ render()->
             U = (I + random_double())/(Image_width-1),
             V = (J + random_double())/(Image_height-1),
             Ray = camera_get_ray(Camera, U, V),
-            C = ray_color(Ray, World),
+            C = ray_color(Ray, World, Max_depth),
             %io:format("~f ~f ~f ~n", numerl:mtfl(C)),
             F(I, J, Sample-1, numerl:add(Color, C))
         end,
@@ -173,7 +193,7 @@ render()->
     WriteLines = 
         fun F([])->ok;
          F([Colors|T])->
-            io:format(S, "~B ~B ~B~n", numerl:mtfli(avg_color(Colors, Samples_per_pixel))),
+            io:format(S, "~B ~B ~B~n", avg_color(Colors, Samples_per_pixel)),
              F(T)
         end,
 
