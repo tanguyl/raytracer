@@ -8,7 +8,7 @@
 -record(sphere,{center, radius, material}).
 -record(ray, {origin, direction}).
 -record(hit, {p, normal, t, front_face, material}).
--record(material, {name, aldebo, fuzz}).
+-record(material, {name, aldebo, fuzz, ir}).
 -record(camera, { origin, horizontal, vertical, lower_left_corner}).
 
 %Vector/color/basic math related function.
@@ -27,8 +27,25 @@ squared_length(V)->
 
 unit_vector(V)->
     numerl:divide(V, numerl:nrm2(V)).
+
+cross(U,V)->
+    [U0, U1, U2] = numerl:mtfl(U),
+    [V0, V1, V2] = numerl:mtfl(V),
+    numerl:matrix([[
+        U1*V2 - U2*V1,
+        U2*V0 - U0*V2,
+        U0*V1 - U1*V0]]).
+
 reflect(V, N)->
     numerl:eval([V, sub, numerl:mult(numerl:mult(N, numerl:vec_dot(V,N)),2)]).
+refract(Uv, N, Etai_over_etat)->
+    Cos_theta = lists:min([numerl:vec_dot(numerl:mult(Uv, -1),N), 1.0]),
+    R_out_perp = numerl:mult(numerl:add(Uv, numerl:mult(N, Cos_theta)), Etai_over_etat),
+    R_out_parallel = numerl:mult(N, -math:sqrt(abs(1 - squared_length(R_out_perp)))),
+    numerl:add(R_out_perp, R_out_parallel).
+reflectance(Cosine, Ref_idx)->
+    R0 = math:pow((1.0-Ref_idx) / (1.0+Ref_idx), 2),
+    R0 + (1-R0)*math:pow(1 - Cosine, 5).
 
 random_double()->
     1.0-rand:uniform().
@@ -60,7 +77,8 @@ clamp(Val, Min, Max)->
         end
     end.
 
-
+degrees_to_radians(Degrees)->
+    Degrees*3.1415926535897932385/180.
 
 %Hit related functions.
 %--------------------------------------------------
@@ -75,8 +93,9 @@ material_lambertian(Aldebo)->
 
 material_metal(Aldebo, Fuzz)->
     #material{name=metal, aldebo = Aldebo, fuzz=clamp(Fuzz, 0,1)}.
-material_metal(Aldebo)->
-    material_metal(Aldebo, 0).
+
+material_dielectric(Index_of_refraction)->
+    #material{name=dielectric, ir=Index_of_refraction}.
 
 %Produce a scattered ray; and indicate how it should be attenuated.
 scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
@@ -102,6 +121,25 @@ scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
         true->
             false
         end;
+
+    dielectric->
+        if Hit#hit.front_face ->
+            Refraction_ratio = 1.0 / Material#material.ir;
+        true->
+            Refraction_ratio = Material#material.ir
+        end,
+        Unit_direction = unit_vector(Ray_in#ray.direction),
+       
+        Cos_theta = min(numerl:vec_dot(numerl:mult(Unit_direction, -1), Hit#hit.normal), 1.0),
+        Sin_theta = sqrt(1 - Cos_theta*Cos_theta),
+        Reflectance = reflectance(Cos_theta, Refraction_ratio) > random_double(),
+
+        if Refraction_ratio * Sin_theta > 1 orelse Reflectance ->
+            Direction = reflect(Unit_direction, Hit#hit.normal);
+        true->
+            Direction =  refract(Unit_direction, Hit#hit.normal, Refraction_ratio)
+        end,
+        {vec3(1.0, 1.0, 1.0), ray(Hit#hit.p, Direction)};
     _ ->
         false
     end.
@@ -111,7 +149,7 @@ scatter(Material=#material{}, Ray_in=#ray{}, Hit=#hit{})->
 %---------------------------------------------------
 
 ray(Origin, Direction)->
-    #ray{origin=Origin, direction=unit_vector(Direction)}.
+    #ray{origin=Origin, direction=Direction}.
 
 ray_at(Ray=#ray{}, T)->
     numerl:add(Ray#ray.origin, numerl:mult(Ray#ray.direction, T)).
@@ -178,24 +216,30 @@ ray_color(Ray=#ray{}, HittableList, Depth)->
 
 %Camera related functions.
 %---------------------------------------------------
-camera(Aspect_ratio)->
-    Viewport_height = 2.0,
+camera(Lookfrom, Lookat, Vup, Vfov, Aspect_ratio)->
+    Theta = degrees_to_radians(Vfov),
+    H = math:tan(Theta/2),
+    Viewport_height = 2.0*H,
     Viewport_width = Aspect_ratio * Viewport_height,
-    Focal_length = 1.0,
 
-    Origin = vec3(0, 0, 0),
-    Horizontal = vec3(Viewport_width, 0, 0),
-    Vertical = vec3(0, Viewport_height, 0),
-    Lower_left_corner = numerl:eval([Origin, sub, numerl:divide(Horizontal,2), sub, numerl:divide(Vertical,2), sub, vec3(0,0, Focal_length)]),
+    W = unit_vector(numerl:sub(Lookfrom, Lookat)),
+    U = unit_vector(cross(Vup, W)),
+    V = cross(W, U),
+
+
+    Origin = Lookfrom,
+    Horizontal = numerl:mult(U,Viewport_width),
+    Vertical = numerl:mult(V,Viewport_height),
+    Lower_left_corner = numerl:eval([Origin, sub, numerl:divide(Horizontal,2), sub, numerl:divide(Vertical,2), sub, W]),
 
     #camera{origin=Origin, horizontal=Horizontal, vertical=Vertical, lower_left_corner=Lower_left_corner}.
 
     
 
-camera_get_ray(Camera=#camera{}, U, V)->
+camera_get_ray(Camera=#camera{}, S, T)->
    #ray{origin=Camera#camera.origin, direction=numerl:eval([Camera#camera.lower_left_corner,
-                                                            add,numerl:mult(Camera#camera.horizontal, U),
-                                                            add,numerl:mult(Camera#camera.vertical, V),
+                                                            add,numerl:mult(Camera#camera.horizontal, S),
+                                                            add,numerl:mult(Camera#camera.vertical, T),
                                                             sub, Camera#camera.origin])}.
 
 %IO related functions.
@@ -209,20 +253,20 @@ avg_color(Color, Samples_per_pixel)->
 render()->
     %Screen.
     Aspect_ratio = 16/9,
-    Image_width = 500,
+    Image_width = 100,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 400,
+    Samples_per_pixel = 100,
     Max_depth = 50,
 
     %Scene.
     World = [
-                #sphere{center=vec3(1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.8, 0.8), 0.1)},
-                #sphere{center=vec3(-1.1,0,-1),radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 0.9)},
-                #sphere{center=vec3(0,0,-1),radius = 0.5, material=material_lambertian(vec3(0.7, 0.3, 0.3))},
-                #sphere{center=vec3(0,-100.5,-1),radius=100, material=material_lambertian(vec3(0.8, 0.8, 0.0))}        
+                %Bottom
+                #sphere{center=vec3( 0.0, -100.5, -1.0), radius = 100, material=material_lambertian(vec3(0.2, 0.2, 0.9))},
+                %Center
+                #sphere{center=vec3( 0.0,    0.0, -1.0), radius = 0.5, material=material_lambertian(vec3(0.9, 0.2, 0.2))}     
             ],
 
-    Camera = camera(Aspect_ratio),
+    Camera = camera(vec3(-2,2,1), vec3(0,0,-1), vec3(0,1,0), 90.0, Aspect_ratio),
 
     GenPixel = 
         fun F(_,_, 0, Color)->
