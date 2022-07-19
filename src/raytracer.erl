@@ -9,7 +9,7 @@
 -record(ray, {origin, direction}).
 -record(hit, {p, normal, t, front_face, material}).
 -record(material, {name, aldebo, fuzz, ir}).
--record(camera, { origin, horizontal, vertical, lower_left_corner}).
+-record(camera, { origin, horizontal, vertical, lower_left_corner, lens_radius, u, v, w}).
 
 %Vector/color/basic math related function.
 %----------------------------------------------------
@@ -64,6 +64,15 @@ random_in_unit_sphere()->
     true->
         random_in_unit_sphere()
     end.
+
+random_in_unit_disk()->
+    P = vec3(random_double(-1,1), random_double(-1,1), 0),
+    L = squared_length(P),
+    if 
+        L >= 1  -> random_in_unit_disk();
+        true    -> P
+    end.
+    
 random_unit_vector()->
     unit_vector(random_vec(-1,1)).
 near_zero(V)->
@@ -216,7 +225,7 @@ ray_color(Ray=#ray{}, HittableList, Depth)->
 
 %Camera related functions.
 %---------------------------------------------------
-camera(Lookfrom, Lookat, Vup, Vfov, Aspect_ratio)->
+camera(Lookfrom, Lookat, Vup, Vfov, Aspect_ratio, Aperture, Focus_dist)->
     Theta = degrees_to_radians(Vfov),
     H = math:tan(Theta/2),
     Viewport_height = 2.0*H,
@@ -228,19 +237,26 @@ camera(Lookfrom, Lookat, Vup, Vfov, Aspect_ratio)->
 
 
     Origin = Lookfrom,
-    Horizontal = numerl:mult(U,Viewport_width),
-    Vertical = numerl:mult(V,Viewport_height),
-    Lower_left_corner = numerl:eval([Origin, sub, numerl:divide(Horizontal,2), sub, numerl:divide(Vertical,2), sub, W]),
+    Horizontal = numerl:mult(numerl:mult(U,Viewport_width), Focus_dist),
+    Vertical = numerl:mult(numerl:mult(V,Viewport_height), Focus_dist),
+    Lower_left_corner = numerl:eval([Origin, sub, numerl:divide(Horizontal,2), sub, numerl:divide(Vertical,2), sub, numerl:mult(W, Focus_dist)]),
 
-    #camera{origin=Origin, horizontal=Horizontal, vertical=Vertical, lower_left_corner=Lower_left_corner}.
+    #camera{origin=Origin, horizontal=Horizontal,
+            vertical=Vertical, lower_left_corner=Lower_left_corner,
+            lens_radius = Aperture/2,
+            u=U, v=V, w=W}.
 
     
 
 camera_get_ray(Camera=#camera{}, S, T)->
-   #ray{origin=Camera#camera.origin, direction=numerl:eval([Camera#camera.lower_left_corner,
-                                                            add,numerl:mult(Camera#camera.horizontal, S),
-                                                            add,numerl:mult(Camera#camera.vertical, T),
-                                                            sub, Camera#camera.origin])}.
+    Rd = numerl:mult(random_in_unit_disk(), Camera#camera.lens_radius),
+    Offset = numerl:add(numerl:mult(Camera#camera.u, numerl:at(Rd,1)), numerl:mult(Camera#camera.v, numerl:at(Rd, 2))),
+    #ray{   origin=numerl:add(Camera#camera.origin, Offset),
+            direction=numerl:eval([Camera#camera.lower_left_corner,
+                                    add,numerl:mult(Camera#camera.horizontal, S),
+                                    add,numerl:mult(Camera#camera.vertical, T),
+                                    sub, Camera#camera.origin,
+                                    sub, Offset])}.
 
 %IO related functions.
 %---------------------------------------------------
@@ -253,9 +269,9 @@ avg_color(Color, Samples_per_pixel)->
 render()->
     %Screen.
     Aspect_ratio = 16/9,
-    Image_width = 100,
+    Image_width = 500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 100,
+    Samples_per_pixel = 250,
     Max_depth = 50,
 
     %Scene.
@@ -263,10 +279,19 @@ render()->
                 %Bottom
                 #sphere{center=vec3( 0.0, -100.5, -1.0), radius = 100, material=material_lambertian(vec3(0.2, 0.2, 0.9))},
                 %Center
-                #sphere{center=vec3( 0.0,    0.0, -1.0), radius = 0.5, material=material_lambertian(vec3(0.9, 0.2, 0.2))}     
+                #sphere{center=vec3( 0.0,    0.0, -1.0), radius = 0.5, material=material_lambertian(vec3(0.9, 0.2, 0.2))},
+                %Left
+                #sphere{center=vec3(-1.0,    0.0, -1.0), radius = 0.5, material=material_dielectric(3)},
+                %Right
+                #sphere{center=vec3(1.0,     0.0, -1.0), radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 0.1)}  
             ],
 
-    Camera = camera(vec3(-2,2,1), vec3(0,0,-1), vec3(0,1,0), 90.0, Aspect_ratio),
+    Lookfrom = vec3(3,3,2),
+    Lookat   = vec3(0,0,-1),
+    Vup      = vec3 (0,1,0),
+    Focus    = numerl:nrm2(numerl:sub(Lookfrom, Lookat)), 
+    Aperture = 2,
+    Camera   = camera(Lookfrom, Lookat, Vup, 20, Aspect_ratio, Aperture, Focus),
 
     GenPixel = 
         fun F(_,_, 0, Color)->
