@@ -266,35 +266,64 @@ avg_color(Color, Samples_per_pixel)->
 
 %Render-related functions.
 %----------------------------------------------------
+
+random_scene(World, 11, 11)->
+    Cste_objects = [
+        #sphere{center=vec3(0, -1000, 0), radius = 1000, material=material_lambertian(vec3(0.5, 0.5, 0.5))},
+        #sphere{center=vec3(0,     1, 0), radius =    1, material=material_dielectric(3)},
+        #sphere{center=vec3(-4,    1, 0), radius =    1, material=material_lambertian(vec3(0.4, 0.2, 0.1))},
+        #sphere{center=vec3(4,     1, 0), radius =    1, material=material_metal(vec3(0.7, 0.6, 0.5), 0.05)} 
+    ],
+    lists:append(World, Cste_objects);
+random_scene(World, Px, 11) ->
+    random_scene(World, Px+1, -11);
+random_scene(World, Px, Py) ->
+    Center = vec3(Px+ 0.9*random_double(), 0.2, Py + 0.9*random_double()),
+    Len = numerl:nrm2(numerl:sub(Center, vec3(4,0.2, 0))),
+    if Len < 0.9 ->
+        Next_world = World;
+    true ->
+        Pick_material = random_double(),
+        if 
+            Pick_material < 0.7 ->
+                Aldebo = numerl:mult(random_vec(), random_vec()),
+                Material = material_lambertian(Aldebo);
+            Pick_material < 0.9 ->
+                Aldebo = random_vec(0.1, 1),
+                Fuzz = random_double(0, 0.4),
+                Material = material_metal(Aldebo, Fuzz);
+            true ->
+                Material = material_dielectric(3)
+        end,
+        Obj = #sphere{center=Center, radius=0.2, material=Material},
+        Next_world = [Obj|World] 
+    end, 
+    random_scene(Next_world, Px, Py+1).
+
+random_scene()->
+    random_scene([], -11, -11).
+
 render()->
     %Screen.
-    Aspect_ratio = 16/9,
-    Image_width = 500,
+    Aspect_ratio = 3/2,
+    Image_width = 200,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 250,
+    Samples_per_pixel = 200,
     Max_depth = 50,
 
     %Scene.
-    World = [
-                %Bottom
-                #sphere{center=vec3( 0.0, -100.5, -1.0), radius = 100, material=material_lambertian(vec3(0.2, 0.2, 0.9))},
-                %Center
-                #sphere{center=vec3( 0.0,    0.0, -1.0), radius = 0.5, material=material_lambertian(vec3(0.9, 0.2, 0.2))},
-                %Left
-                #sphere{center=vec3(-1.0,    0.0, -1.0), radius = 0.5, material=material_dielectric(3)},
-                %Right
-                #sphere{center=vec3(1.0,     0.0, -1.0), radius = 0.5, material=material_metal(vec3(0.8, 0.6, 0.2), 0.1)}  
-            ],
+    World = random_scene(),
 
-    Lookfrom = vec3(3,3,2),
-    Lookat   = vec3(0,0,-1),
+    Lookfrom = vec3(13,2,3),
+    Lookat   = vec3(0,0,0),
     Vup      = vec3 (0,1,0),
-    Focus    = numerl:nrm2(numerl:sub(Lookfrom, Lookat)), 
-    Aperture = 2,
+    Focus    = 10, 
+    Aperture = 0.1,
     Camera   = camera(Lookfrom, Lookat, Vup, 20, Aspect_ratio, Aperture, Focus),
 
     GenPixel = 
-        fun F(_,_, 0, Color)->
+        fun F(I, J, 0, Color)->
+            io:format("\r~f%", [100*(I+(Image_height-J)*Image_width) /(Image_height*Image_width)]),
             Color;
         F(I,J, Sample, Color)->
             U = (I + random_double())/(Image_width-1),
@@ -315,6 +344,6 @@ render()->
         end,
 
     io:format(S, "P3\n~B ~B\n255\n", [Image_width - 1, Image_height - 1]),
-    io:format("Writing file...~n"),
+    io:format("~nWriting file...~n"),
     WriteLines(lists:flatten(Picture)),
     file:close(S).
