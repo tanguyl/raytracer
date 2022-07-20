@@ -308,9 +308,9 @@ render()->
 
     %Screen.
     Aspect_ratio = 3/2,
-    Image_width = 1500,
+    Image_width = 50,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 500,
+    Samples_per_pixel = 200,
     Max_depth = 50,
 
     %Scene.
