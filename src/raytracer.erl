@@ -304,7 +304,6 @@ random_scene()->
     random_scene([], -11, -11).
 
 render()->
-    Init_time = time(),
 
     %Screen.
     Aspect_ratio = 3/2,
@@ -346,8 +345,6 @@ render()->
         end,
 
     io:format(S, "P3\n~B ~B\n255\n", [Image_width - 1, Image_height - 1]),
-    Total_time = timer:now_diff(time(), Init_time),
-    io:format("\rExecution time: ~b s~n", [Total_time]),
     io:format("~nWriting file...~n"),
     WriteLines(lists:flatten(Picture)),
     file:close(S).
