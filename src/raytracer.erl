@@ -304,11 +304,13 @@ random_scene()->
     random_scene([], -11, -11).
 
 render()->
+    Init_time = time(),
+
     %Screen.
     Aspect_ratio = 3/2,
-    Image_width = 200,
+    Image_width = 1500,
     Image_height = round(Image_width / Aspect_ratio),
-    Samples_per_pixel = 200,
+    Samples_per_pixel = 500,
     Max_depth = 50,
 
     %Scene.
@@ -323,7 +325,7 @@ render()->
 
     GenPixel = 
         fun F(I, J, 0, Color)->
-            io:format("\r~f%", [100*(I+(Image_height-J)*Image_width) /(Image_height*Image_width)]),
+            io:format("\r~.2f%", [100*(I+(Image_height-J)*Image_width) /(Image_height*Image_width)]),
             Color;
         F(I,J, Sample, Color)->
             U = (I + random_double())/(Image_width-1),
@@ -344,6 +346,8 @@ render()->
         end,
 
     io:format(S, "P3\n~B ~B\n255\n", [Image_width - 1, Image_height - 1]),
+    Total_time = timer:now_diff(time(), Init_time),
+    io:format("\rExecution time: ~b s~n", [Total_time]),
     io:format("~nWriting file...~n"),
     WriteLines(lists:flatten(Picture)),
     file:close(S).
