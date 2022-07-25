@@ -257,7 +257,6 @@ camera_get_ray(Camera=#camera{}, S, T)->
                                     add,numerl:mult(Camera#camera.vertical, T),
                                     sub, Camera#camera.origin,
                                     sub, Offset])}.
-
 %IO related functions.
 %---------------------------------------------------
 avg_color(Color, Samples_per_pixel)->
