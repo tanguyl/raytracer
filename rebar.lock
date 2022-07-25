@@ -1,4 +1,8 @@
-[{<<"numerl">>,
+[{<<"linalg">>,
+  {git,"https://github.com/sklassen/erlang-linalg-native.git",
+       {ref,"b31eef532b9fe2be7ecbff52a060ccdc833b4dca"}},
+  0},
+ {<<"numerl">>,
   {git,"https://github.com/tanguyl/numerl.git",
-       {ref,"bf10686858d1c931c7bd6ab38ed9ddae49bf1b04"}},
+       {ref,"4494c5fe34f60ae7213e7f2da5fb109c1400ee0b"}},
   0}].
